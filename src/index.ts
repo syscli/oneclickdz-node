@@ -1,5 +1,15 @@
-// Public entry point. The client and resource types are wired up in later steps.
+// Public entry point.
 export const VERSION = "0.1.0";
+
+export { OneClickDZ } from "./client";
+export type { OneClickDZOptions } from "./client";
+
+export { Core } from "./resources/core";
+export { Account } from "./resources/account";
+export { Mobile } from "./resources/mobile";
+export { Internet } from "./resources/internet";
+export { GiftCards } from "./resources/giftcards";
+export { Payments } from "./resources/payments";
 
 export {
   OneClickError,
