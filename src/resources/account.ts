@@ -3,15 +3,18 @@
 // async iterator that walks the whole history.
 
 import { Resource, type Page } from "./base";
-import type { Pagination } from "../http";
+import type { Envelope, Pagination } from "../http";
 import type { Balance, Transaction, TransactionsParams } from "../types";
 
 /** The transactions endpoint nests its items and pagination inside `data`. */
-function extractTransactions(data: unknown): {
+function extractTransactions(env: Envelope<unknown>): {
   items: Transaction[];
   pagination: Pagination;
 } {
-  const d = (data ?? {}) as { items?: Transaction[]; pagination?: Pagination };
+  const d = (env.data ?? {}) as {
+    items?: Transaction[];
+    pagination?: Pagination;
+  };
   return {
     items: d.items ?? [],
     pagination:

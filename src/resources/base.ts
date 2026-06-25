@@ -3,7 +3,7 @@
 // a paginated list. List endpoints differ in where they nest their items, so the
 // pagination helper takes an extractor and lets each resource map its own shape.
 
-import type { HttpClient, QueryParams } from "../http";
+import type { HttpClient, QueryParams, Envelope } from "../http";
 import type { Pagination } from "../http";
 
 /**
@@ -44,16 +44,17 @@ export abstract class Resource {
 
   /**
    * Fetch one page of a list. `extract` pulls the items and the pagination block
-   * out of whatever shape the endpoint nests them in. `next()` reissues the same
-   * request with the page number bumped.
+   * out of whatever shape the endpoint nests them in; it gets the whole envelope
+   * because some endpoints keep pagination in `data` and others in `meta`.
+   * `next()` reissues the same request with the page number bumped.
    */
   protected async fetchPage<T>(
     path: string,
     query: QueryParams,
-    extract: (data: unknown) => { items: T[]; pagination: Pagination },
+    extract: (env: Envelope<unknown>) => { items: T[]; pagination: Pagination },
   ): Promise<Page<T>> {
     const env = await this.http.request<unknown>("GET", path, { query });
-    const { items, pagination } = extract(env.data);
+    const { items, pagination } = extract(env);
     const hasMore = pagination.page < pagination.totalPages;
     return {
       items,

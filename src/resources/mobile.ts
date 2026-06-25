@@ -4,7 +4,7 @@
 // when you leave one out. `sendAndWait` does the whole round trip for you.
 
 import { Resource, type Page } from "./base";
-import type { Pagination } from "../http";
+import type { Envelope, Pagination } from "../http";
 import type { TopupStatus } from "../types";
 import { TOPUP_TERMINAL } from "../types";
 import { pollUntil, type PollOptions } from "../poll";
@@ -83,11 +83,14 @@ export interface MobileListParams {
   to?: string;
 }
 
-function extractTopups(data: unknown): {
+function extractTopups(env: Envelope<unknown>): {
   items: MobileTopup[];
   pagination: Pagination;
 } {
-  const d = (data ?? {}) as { items?: MobileTopup[]; pagination?: Pagination };
+  const d = (env.data ?? {}) as {
+    items?: MobileTopup[];
+    pagination?: Pagination;
+  };
   return {
     items: d.items ?? [],
     pagination:

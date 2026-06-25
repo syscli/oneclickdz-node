@@ -64,6 +64,17 @@ export type {
   MobileListParams,
 } from "./resources/mobile";
 
+export type {
+  InternetType,
+  InternetProduct,
+  InternetProducts,
+  NumberCheck,
+  InternetSendInput,
+  InternetSendResult,
+  InternetTopup,
+  InternetListParams,
+} from "./resources/internet";
+
 export {
   TOPUP_TERMINAL,
   GIFT_TERMINAL,
