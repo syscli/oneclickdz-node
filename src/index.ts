@@ -51,6 +51,19 @@ export {
 
 export type { Page } from "./resources/base";
 
+export { generateRef } from "./ref";
+
+export type {
+  MobilePlans,
+  DynamicMobilePlan,
+  FixedMobilePlan,
+  MobileSendInput,
+  MobileSendResult,
+  MobileTopup,
+  SuggestedOffer,
+  MobileListParams,
+} from "./resources/mobile";
+
 export {
   TOPUP_TERMINAL,
   GIFT_TERMINAL,
