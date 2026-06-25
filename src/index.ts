@@ -31,3 +31,20 @@ export type {
   ResponseMeta,
   Envelope,
 } from "./http";
+
+export { Secret, isSecret, reveal } from "./secret";
+
+export { pollUntil, PollTimeoutError } from "./poll";
+export type { PollOptions } from "./poll";
+
+export {
+  Issues,
+  requireText,
+  isMobileNumber,
+  isAdslNumber,
+  isFourgNumber,
+  isWholeAmount,
+  MOBILE_NUMBER,
+  ADSL_NUMBER,
+  FOURG_NUMBER,
+} from "./validate";
