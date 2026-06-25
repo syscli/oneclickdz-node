@@ -6,11 +6,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/syscli/oneclickdz-node.git"
+    "url": "git+https://github.com/SYSCLI/oneclickdz-node.git"
   },
-  "homepage": "https://github.com/syscli/oneclickdz-node#readme",
+  "homepage": "https://github.com/SYSCLI/oneclickdz-node#readme",
   "bugs": {
-    "url": "https://github.com/syscli/oneclickdz-node/issues"
+    "url": "https://github.com/SYSCLI/oneclickdz-node/issues"
   },
   "engines": {
     "node": ">=18"

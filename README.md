@@ -254,6 +254,9 @@ Worth knowing before you build on it:
 - **No webhooks yet.** The API does not offer them at the time of writing, so the
   only way to learn an outcome is to poll. The `*AndWait` helpers and the
   pollers are built around that. Webhook support can be added once it ships.
+- **Navio needs merchant onboarding.** `createLink` returns a 403 until the
+  account completes merchant validation in the dashboard. The client surfaces
+  that as a `ForbiddenError`; it is an account step, not a code change.
 - **A QUEUED internet order is slow.** It can take up to 48 hours, well past the
   default polling window. Treat `QUEUED` as accepted and check back later rather
   than waiting in process.
