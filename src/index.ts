@@ -89,6 +89,20 @@ export type {
 } from "./resources/giftcards";
 
 export {
+  MIN_PAYMENT_AMOUNT,
+  MAX_PAYMENT_AMOUNT,
+} from "./resources/payments";
+export type {
+  FeeMode,
+  PaymentProductInfo,
+  CreateLinkInput,
+  PaymentLink,
+  CreateLinkResult,
+  PaymentTransactionDetails,
+  PaymentCheck,
+} from "./resources/payments";
+
+export {
   TOPUP_TERMINAL,
   GIFT_TERMINAL,
   PAYMENT_TERMINAL,
