@@ -16,8 +16,8 @@ export interface GiftProductSummary {
   id: string;
   title: string;
   enabled: boolean;
-  /** The region the product is valid in, such as US or EU. */
-  region: string;
+  /** The region the product is valid in, such as france or turkey. Absent on some products. */
+  region?: string;
 }
 
 export interface GiftCategory {
@@ -67,7 +67,6 @@ export interface GiftCard {
 }
 
 export interface GiftOrder {
-  _id: string;
   status: GiftOrderStatus;
   quantity: number;
   fulfilled_quantity: number;
@@ -75,9 +74,11 @@ export interface GiftOrder {
   price_per_card: number;
   /** Filled once the order is FULFILLED or PARTIALLY_FILLED. */
   cards: GiftCard[];
-  product: string;
-  type: string;
-  time: string;
+  /** Present in the order list; the single-order check omits these. */
+  _id?: string;
+  product?: string;
+  type?: string;
+  time?: string;
 }
 
 export interface GiftOrdersParams {
@@ -93,16 +94,16 @@ interface RawCard {
 }
 
 interface RawGiftOrder {
-  _id: string;
   status: GiftOrderStatus;
   quantity: number;
   fulfilled_quantity: number;
   fulfilled_amount: number;
   price_per_card: number;
   cards?: RawCard[];
-  product: string;
-  type: string;
-  time: string;
+  _id?: string;
+  product?: string;
+  type?: string;
+  time?: string;
 }
 
 /** Wrap each card's code and serial so neither can be logged by accident. */

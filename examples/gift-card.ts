@@ -29,7 +29,7 @@ async function main() {
     quantity: 1,
   });
 
-  console.log(`Order ${order._id} is ${order.status}.`);
+  console.log(`Order is ${order.status}, ${order.fulfilled_quantity} card(s) delivered.`);
   for (const card of order.cards) {
     // The code prints redacted unless you reveal it on purpose.
     console.log("card:", String(card.value));

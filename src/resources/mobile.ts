@@ -15,8 +15,11 @@ interface MobilePlanBase {
   code: string;
   name: string;
   operator: string;
-  /** Your wholesale cost. Do not show this to end users; apply your own markup. */
-  cost: number;
+  /**
+   * Your wholesale cost factor. Absent on the wholesale `GROS_*` plans. Do not
+   * show it to end users; apply your own markup.
+   */
+  cost?: number;
   isEnabled: boolean;
 }
 
