@@ -2,5 +2,19 @@
 
 ## [0.1.0] - 2026-06-25
 
-Initial scaffold: package config, TypeScript, tsup dual build, and the vitest
-setup. No client surface yet.
+First release. A typed client for the OneClickDZ v3 API, server-side, with no
+runtime dependencies.
+
+- `OneClickDZ` client with resources for core, account, mobile, internet, gift
+  cards, and Navio payments.
+- Mobile and internet top-ups: `send`, status checks by reference and by id,
+  `sendAndWait`, and paginated history.
+- Gift cards: catalog, product check, order placement, `placeOrderAndWait`, and
+  paginated orders.
+- Navio payment links: `createLink`, `checkPayment`, and `waitForPayment`.
+- Card codes returned wrapped in `Secret`, redacted in logs until revealed.
+- Auto-generated order references for safe resends, with `DuplicateRefError` for
+  a reused reference.
+- Client-side validation for numbers, amounts, and quantities.
+- Error hierarchy mapped from the API codes, 429 retry honoring `Retry-After`,
+  and read-only retry on 5xx and network failures.
