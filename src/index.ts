@@ -75,6 +75,19 @@ export type {
   InternetListParams,
 } from "./resources/internet";
 
+export type {
+  GiftProductSummary,
+  GiftCategory,
+  GiftCatalog,
+  GiftProductType,
+  GiftProductDetails,
+  GiftOrderInput,
+  GiftOrderResult,
+  GiftCard,
+  GiftOrder,
+  GiftOrdersParams,
+} from "./resources/giftcards";
+
 export {
   TOPUP_TERMINAL,
   GIFT_TERMINAL,
