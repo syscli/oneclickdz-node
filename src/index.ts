@@ -63,6 +63,17 @@ export type { Page } from "./resources/base";
 
 export { generateRef } from "./ref";
 
+export {
+  sellPrice,
+  priceInternetProducts,
+  priceGiftTypes,
+} from "./pricing";
+export type {
+  Markup,
+  CustomerInternetProduct,
+  CustomerGiftType,
+} from "./pricing";
+
 export type {
   MobilePlans,
   DynamicMobilePlan,

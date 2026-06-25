@@ -192,8 +192,8 @@ export class Internet extends Resource {
 
   /**
    * Send and wait for the recharge to settle. Resolves with the final order,
-   * its `card_code` ready to reveal once FULFILLED. Note that a QUEUED order can
-   * take up to 48 hours, longer than the default polling window.
+   * its `card_code` ready to reveal once FULFILLED. A QUEUED order can take up to
+   * 48 hours, well past the default polling window, so expect a timeout there.
    */
   async sendAndWait(
     input: InternetSendInput,

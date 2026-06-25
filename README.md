@@ -183,6 +183,25 @@ const payment = await oneclick.payments.waitForPayment(link.paymentRef);
 console.log(payment.status); // "CONFIRMED" or "FAILED"
 ```
 
+## Resale pricing
+
+The API returns your wholesale `cost` on internet products and gift-card types,
+and that figure must never reach a customer. Pick a markup and get back a clean,
+customer-facing list with the cost gone:
+
+```ts
+import { priceInternetProducts } from "@syscli/oneclickdz";
+
+const products = await oneclick.internet.products("4G");
+const forSale = priceInternetProducts(products.products, { percent: 10 });
+// [{ value: 1000, price: 1078, available: true }, ...] and no cost field
+
+import { sellPrice } from "@syscli/oneclickdz";
+sellPrice(480, { flat: 100 }); // 580
+```
+
+`priceGiftTypes` does the same for a gift product's denominations.
+
 ## Validation
 
 Inputs are checked before the request leaves. A wrong number for the service, an
