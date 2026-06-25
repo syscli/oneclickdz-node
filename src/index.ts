@@ -48,3 +48,25 @@ export {
   ADSL_NUMBER,
   FOURG_NUMBER,
 } from "./validate";
+
+export type { Page } from "./resources/base";
+
+export {
+  TOPUP_TERMINAL,
+  GIFT_TERMINAL,
+  PAYMENT_TERMINAL,
+} from "./types";
+export type {
+  TopupStatus,
+  GiftOrderStatus,
+  PaymentStatus,
+  KeyType,
+  KeyScope,
+  ApiKeyInfo,
+  ValidateResult,
+  ServiceHealth,
+  Balance,
+  Transaction,
+  TransactionsParams,
+  ItemsPage,
+} from "./types";
