@@ -56,7 +56,8 @@ export interface PaymentTransactionDetails {
   amount: number;
   currency: string;
   isSandbox: boolean;
-  createdDate: string;
+  /** Set once a payment has been started; absent while still PENDING. */
+  createdDate?: string;
 }
 
 export interface PaymentCheck {
