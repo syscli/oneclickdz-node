@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0] - 2026-06-27
+
+- `mobile.getOffers(operator, number)` lists the operator offers available for a
+  number, driving the GETMENU plans and returning each offer's `plan_code` and
+  `amount`.
+- `sendAndWait` and `getOffers` now poll by the top-up id from the send response
+  rather than the order reference, which the API rewrites. Status checks are more
+  reliable as a result.
+- Navio payments confirmed end to end against the live API. `createLink` and
+  `checkPayment` parse as typed; `transactionDetails.createdDate` is optional,
+  since it is absent while a payment is still pending.
+- Continuous integration runs typecheck, tests, and the build on Node 18, 20,
+  and 22.
+
 ## [0.1.0] - 2026-06-25
 
 First release. A typed client for the OneClickDZ v3 API, server-side, with no

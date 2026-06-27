@@ -105,6 +105,24 @@ await oneclick.giftCards.placeOrderAndWait(order, {
 A wait that never settles inside its budget throws a `PollTimeoutError` that
 carries the last status it saw on `error.last`.
 
+## Available offers for a number
+
+Some numbers have operator offers that are cheaper or larger than a plain top-up.
+`getOffers` reads them. It drives the GETMENU plans for you: it sends a probe the
+operator refunds rather than charges, then returns the offers off the result.
+Each one carries the `plan_code` and `amount` you would pass to `send` to buy it:
+
+```ts
+const offers = await oneclick.mobile.getOffers("Djezzy", "0778037340");
+// [{ typename: "HAYLA BEZZEF 100", plan_code: "MIX100_DJEZZY", amount: 100 }, ...]
+
+await oneclick.mobile.sendAndWait({
+  plan_code: offers[0].plan_code,
+  MSSIDN: "0778037340",
+  amount: offers[0].amount,
+});
+```
+
 ## References and safe resends
 
 Every send takes an optional `ref`. Leave it out and the client generates one, so
