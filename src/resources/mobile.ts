@@ -55,12 +55,18 @@ export interface MobileSendResult {
   topupRef: string;
 }
 
-/** A retry the API suggests after a refund. */
+/** A retry the API suggests after a refund, and the shape `getOffers` returns. */
 export interface SuggestedOffer {
   typename: string;
   plan_code: string;
   amount: number;
 }
+
+/** The operators whose offers `getOffers` can list. */
+export type MobileOperator = "Mobilis" | "Djezzy" | "Ooredoo";
+
+/** An offer available for a number. The same shape as a suggested offer. */
+export type MobileOffer = SuggestedOffer;
 
 export interface MobileTopup {
   _id: string;
@@ -162,13 +168,42 @@ export class Mobile extends Resource {
     input: MobileSendInput,
     options: PollOptions = {},
   ): Promise<MobileTopup> {
-    const ref = input.ref ?? generateRef();
-    await this.send({ ...input, ref }, options.signal);
-    return pollUntil(() => this.checkByRef(ref, options.signal), isTerminal, {
-      intervalMs: 5000,
-      maxAttempts: 60,
-      ...options,
-    });
+    const { topupId } = await this.send(input, options.signal);
+    return pollUntil(
+      () => this.checkById(topupId, options.signal),
+      isTerminal,
+      { intervalMs: 5000, maxAttempts: 60, ...options },
+    );
+  }
+
+  /**
+   * List the offers available for a number. This drives the GETMENU plans: it
+   * sends a GETMENU order with a small probe amount that the operator refunds
+   * rather than charges, then reads the offers back off the refunded order. Each
+   * offer carries the `plan_code` and `amount` you would pass to `send` to buy it.
+   */
+  async getOffers(
+    operator: MobileOperator,
+    MSSIDN: string,
+    options: PollOptions = {},
+  ): Promise<MobileOffer[]> {
+    if (!isMobileNumber(MSSIDN)) {
+      const issues = new Issues();
+      issues.add("MSSIDN", "is not a valid mobile number");
+      issues.throwIfAny();
+    }
+    // The amount is a refunded probe, not a charge. A small in-range value works
+    // across operators; the GETMENU plans accept from 50 dinars up.
+    const { topupId } = await this.send(
+      { plan_code: `GETMENU_${operator}`, MSSIDN, amount: 50 },
+      options.signal,
+    );
+    const topup = await pollUntil(
+      () => this.checkById(topupId, options.signal),
+      isTerminal,
+      { intervalMs: 3000, maxAttempts: 20, ...options },
+    );
+    return topup.suggested_offers ?? [];
   }
 
   /** One page of your past top-ups, newest first. */

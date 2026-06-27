@@ -82,6 +82,8 @@ export type {
   MobileSendResult,
   MobileTopup,
   SuggestedOffer,
+  MobileOperator,
+  MobileOffer,
   MobileListParams,
 } from "./resources/mobile";
 

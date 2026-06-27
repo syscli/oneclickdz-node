@@ -199,13 +199,12 @@ export class Internet extends Resource {
     input: InternetSendInput,
     options: PollOptions = {},
   ): Promise<InternetTopup> {
-    const ref = input.ref ?? generateRef();
-    await this.send({ ...input, ref }, options.signal);
-    return pollUntil(() => this.checkByRef(ref, options.signal), isTerminal, {
-      intervalMs: 5000,
-      maxAttempts: 60,
-      ...options,
-    });
+    const { topupId } = await this.send(input, options.signal);
+    return pollUntil(
+      () => this.checkById(topupId, options.signal),
+      isTerminal,
+      { intervalMs: 5000, maxAttempts: 60, ...options },
+    );
   }
 
   list(params: InternetListParams = {}): Promise<Page<InternetTopup>> {

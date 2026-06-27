@@ -84,11 +84,56 @@ describe("Mobile.sendAndWait", () => {
     expect(result.status).toBe("FULFILLED");
     // One send plus three status checks.
     expect(fetchImpl).toHaveBeenCalledTimes(4);
-    // It polls by the reference it generated and sent, not the response echo.
-    const sentRef = JSON.parse(fetchImpl.mock.calls[0]![1]!.body as string).ref;
-    expect(String(fetchImpl.mock.calls[1]![0])).toContain(
-      `/mobile/check-ref/${sentRef}`,
+    // It polls by the topup id from the send response, which is unambiguous.
+    expect(String(fetchImpl.mock.calls[1]![0])).toContain("/mobile/check-id/t1");
+  });
+});
+
+describe("Mobile.getOffers", () => {
+  it("sends a GETMENU probe and returns the offers off the refunded order", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const path = String(url);
+      if (path.endsWith("/mobile/send")) {
+        return jsonResponse({
+          success: true,
+          data: { topupId: "g1", topupRef: "r1" },
+        });
+      }
+      return jsonResponse({
+        success: true,
+        data: {
+          _id: "g1",
+          ref: "r1",
+          status: "REFUNDED",
+          plan_code: "GETMENU_Djezzy",
+          MSSIDN: "0798037340",
+          refund_message: "offers available",
+          suggested_offers: [
+            { typename: "HAYLA 100", plan_code: "MIX100_DJEZZY", amount: 100 },
+            { typename: "HAYLA 500", plan_code: "MIX500_DJEZZY", amount: 500 },
+          ],
+        },
+      });
+    }) as unknown as FetchLike;
+
+    const offers = await new Mobile(http(fetchImpl)).getOffers(
+      "Djezzy",
+      "0798037340",
+      { intervalMs: 0 },
     );
+    expect(offers).toHaveLength(2);
+    expect(offers[0]?.plan_code).toBe("MIX100_DJEZZY");
+
+    const sent = JSON.parse(fetchImpl.mock.calls[0]![1]!.body as string);
+    expect(sent.plan_code).toBe("GETMENU_Djezzy");
+  });
+
+  it("rejects a malformed number without sending", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ success: true, data: {} }));
+    await expect(
+      new Mobile(http(fetchImpl)).getOffers("Mobilis", "123"),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
 
