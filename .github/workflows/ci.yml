@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -22,3 +25,14 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm audit --omit=dev
+      - name: Smoke test the packed tarball
+        run: |
+          npm pack --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/smoke"
+          cd "$RUNNER_TEMP/smoke"
+          npm init -y > /dev/null
+          npm install "$RUNNER_TEMP"/syscli-oneclickdz-*.tgz
+          node -e "const m = require('@syscli/oneclickdz'); if (typeof m.OneClickDZ !== 'function') process.exit(1)"
+          node --input-type=module -e "import { OneClickDZ } from '@syscli/oneclickdz'; if (typeof OneClickDZ !== 'function') process.exit(1)"
+          node -e "require('@syscli/oneclickdz/package.json')"
