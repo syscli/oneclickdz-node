@@ -58,7 +58,9 @@ if (apiKey.type !== "PRODUCTION") {
 }
 ```
 
-The token goes over the wire as the `X-Access-Token` header. After five failed
+The key `validate()` echoes back on `apiKey.key` is wrapped in a `Secret`, so
+logging the result does not leak it. The token goes over the wire as the
+`X-Access-Token` header. After five failed
 auth attempts the API blocks your IP for fifteen minutes, so cache a working key
 rather than guessing.
 
@@ -68,14 +70,18 @@ A send returns an id and a reference; the order then moves from `PENDING` throug
 `HANDLING` to a final state. You can drive that yourself:
 
 ```ts
-const { topupRef } = await oneclick.mobile.send({
+const { topupId } = await oneclick.mobile.send({
   plan_code: "PREPAID_MOBILIS",
   MSSIDN: "0661234567",
   amount: 1000,
 });
 
-const status = await oneclick.mobile.checkByRef(topupRef);
+const status = await oneclick.mobile.checkById(topupId);
 ```
+
+Prefer `checkById` with the `topupId` from the send. The API can rewrite the
+order reference, so a lookup by ref is the fallback for when you never got an
+id back.
 
 Or let the client poll for you. `sendAndWait` checks every five seconds and
 resolves once the order is `FULFILLED`, `REFUNDED`, or `UNKNOWN_ERROR`:
@@ -103,45 +109,69 @@ await oneclick.giftCards.placeOrderAndWait(order, {
 ```
 
 A wait that never settles inside its budget throws a `PollTimeoutError` that
-carries the last status it saw on `error.last`.
+carries the last status it saw on `error.last`. Any error from a `*AndWait`
+helper carries `error.ref` and, once the order was accepted, `error.orderId`
+(the topup id or gift order id), so you can check on the order later instead of
+placing it again.
 
 ## Available offers for a number
 
 Some numbers have operator offers that are cheaper or larger than a plain top-up.
-`getOffers` reads them. It drives the GETMENU plans for you: it sends a probe the
-operator refunds rather than charges, then returns the offers off the result.
-Each one carries the `plan_code` and `amount` you would pass to `send` to buy it:
+`getOffers` reads them through the GETMENU plans.
+
+**It places a real 50 DZD order.** The operator is expected to refund it and the
+offers are read off the refunded order, but the amount is held until the order
+settles, and one that ends in `UNKNOWN_ERROR` may not come back right away. Pass
+a `ref` if you want to track the probe as your own order. Each offer carries the
+`plan_code` and `amount` you would pass to `send` to buy it:
 
 ```ts
-const offers = await oneclick.mobile.getOffers("Djezzy", "0778037340");
+const offers = await oneclick.mobile.getOffers("Djezzy", "0778037340", {
+  ref: "offers-1043",
+});
 // [{ typename: "HAYLA BEZZEF 100", plan_code: "MIX100_DJEZZY", amount: 100 }, ...]
 
-await oneclick.mobile.sendAndWait({
-  plan_code: offers[0].plan_code,
-  MSSIDN: "0778037340",
-  amount: offers[0].amount,
-});
+const offer = offers[0];
+if (offer) {
+  await oneclick.mobile.sendAndWait({
+    plan_code: offer.plan_code,
+    MSSIDN: "0778037340",
+    amount: offer.amount,
+  });
+}
 ```
 
 ## References and safe resends
 
-Every send takes an optional `ref`. Leave it out and the client generates one, so
-a resend after a dropped connection reuses the same reference and the API rejects
-the duplicate instead of charging twice. A duplicate is a `DuplicateRefError`, its
-own class, so you can tell it apart from a real failure:
+Every send takes an optional `ref`. Leave it out and the client generates one.
+Either way, any error from `send` or `sendAndWait` carries the reference on
+`error.ref`.
+
+**After a `NetworkError` or a timeout, do not call `send` again.** The top-up may
+have gone through, and a second `send` without the same ref is a second order.
+Reconcile first: look the order up with `checkByRef(error.ref)`, or find it in
+`list()`. Only if it is not there, resend with the same `ref`; the API rejects a
+reused ref with a `DuplicateRefError` rather than charging twice. Passing your
+own ref, tied to your own order id, makes this easiest:
 
 ```ts
-import { DuplicateRefError } from "@syscli/oneclickdz";
+import { DuplicateRefError, NetworkError } from "@syscli/oneclickdz";
 
 try {
   await oneclick.mobile.send({ plan_code, MSSIDN, amount, ref: "order-1043" });
 } catch (error) {
-  if (error instanceof DuplicateRefError) {
+  if (error instanceof NetworkError) {
+    // Unknown outcome. Check before doing anything else.
     const existing = await oneclick.mobile.checkByRef("order-1043");
+  } else if (error instanceof DuplicateRefError) {
     // The first order stands. Read it rather than sending again.
   }
 }
 ```
+
+Gift card orders take no reference at all, so a failed `placeOrder` cannot be
+deduplicated by the API. After a `NetworkError` or a timeout, look for the order
+in `giftCards.listOrders()` before placing it again.
 
 ## Card codes are secrets
 
@@ -172,9 +202,12 @@ pricing and stock, place the order, then wait for the codes:
 const catalog = await oneclick.giftCards.catalog();
 const details = await oneclick.giftCards.checkProduct("psn-us");
 
+const type = details.types.find((t) => t.quantity > 0);
+if (!type) throw new Error("Out of stock.");
+
 const order = await oneclick.giftCards.placeOrderAndWait({
   productId: "psn-us",
-  typeId: details.types[0].id,
+  typeId: type.id,
   quantity: 2,
 });
 
@@ -218,7 +251,9 @@ import { sellPrice } from "@syscli/oneclickdz";
 sellPrice(480, { flat: 100 }); // 580
 ```
 
-`priceGiftTypes` does the same for a gift product's denominations.
+`priceGiftTypes` does the same for a gift product's denominations. Prices round
+up to a whole dinar, so a sale never lands under cost, and a negative or
+non-finite markup throws a `RangeError`.
 
 ## Validation
 
@@ -261,12 +296,20 @@ import {
 
 ## Rate limits and retries
 
-The API allows 60 requests a minute on sandbox and 120 on production. On a 429
-the client waits the `Retry-After` and tries again, up to three attempts. A 5xx
-or a dropped connection is retried too, but only for reads: a top-up that timed
-out may still have gone through, so the client never blindly resends a charge.
-That is also why a server error on a send should not be refunded right away; the
-docs note it can still settle within a day.
+The API allows 60 requests a minute on sandbox and 120 on production. Reads are
+retried up to three attempts on a 429, a 5xx, or a dropped connection, waiting
+the `Retry-After` (capped at 60 seconds) or an exponential backoff. A send is
+never retried by default: a top-up that timed out may still have gone through,
+so the client never blindly resends a charge. If you trust the API to reject a
+429 before processing, opt in for sends:
+
+```ts
+new OneClickDZ({ key, retry: { retryPostOn429: true } });
+```
+
+A server error on a send should not be refunded right away either; the docs
+note it can still settle within a day. The timeout covers the whole request,
+body included, and an `AbortSignal` also cancels a wait between retries.
 
 ## Pagination
 
@@ -281,6 +324,9 @@ for await (const tx of oneclick.account.paginateTransactions()) {
   console.log(tx.type, tx.amount, tx.newBalance);
 }
 ```
+
+Every list and paginate call takes an `AbortSignal` as its second argument, and
+`next()` reuses it.
 
 ## Limitations
 
@@ -304,8 +350,9 @@ Worth knowing before you build on it:
 
 ```sh
 npm install
-npm test        # vitest
-npm run build   # tsup, dual ESM and CJS plus types
+npm run typecheck  # src, then tests and examples
+npm test           # vitest
+npm run build      # tsup, dual ESM and CJS plus types
 ```
 
 A small set of live tests run against the real API when `ONECLICKDZ_API_KEY` is
