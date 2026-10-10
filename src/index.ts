@@ -33,6 +33,7 @@ export type {
   RateLimitErrorOptions,
 } from "./errors";
 
+export { MAX_RETRY_AFTER_MS } from "./http";
 export type {
   HttpMethod,
   FetchLike,

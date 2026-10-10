@@ -19,8 +19,13 @@ export type FetchLike = typeof globalThis.fetch;
 export interface RetryConfig {
   /** Total attempts including the first. 1 disables retrying. */
   attempts: number;
-  /** Wait the Retry-After header when the API sends one. */
+  /** Wait the Retry-After header when the API sends one, up to 60 seconds. */
   respectRetryAfter: boolean;
+  /**
+   * Retry a POST that got a 429. Off by default, so a send is never repeated
+   * unless you opt in.
+   */
+  retryPostOn429?: boolean;
 }
 
 /** Page numbers and totals the API returns on list endpoints. */
@@ -50,8 +55,24 @@ export interface Envelope<T> {
   [key: string]: unknown;
 }
 
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+/** The longest the client waits on a Retry-After before trying again. */
+export const MAX_RETRY_AFTER_MS = 60_000;
+
+/** A sleep that rejects as soon as the signal aborts. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal!.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 export type QueryValue = string | number | boolean | null | undefined;
 export type QueryParams = Record<string, QueryValue>;
@@ -138,10 +159,10 @@ export class HttpClient {
   /**
    * Send a request and return the unwrapped envelope.
    *
-   * Retry policy is deliberately narrow. A 429 is always safe to retry, since
-   * the request was rejected before processing. A 5xx or a dropped connection is
-   * retried only for GET: a send that timed out may still have gone through, and
-   * a blind retry could charge the account twice. Use a `ref` for safe resends.
+   * Retry policy is deliberately narrow. Only GET is retried by default, on a
+   * 429, a 5xx, or a dropped connection. A send that timed out may still have
+   * gone through, and a blind retry could charge the account twice. A POST is
+   * retried on 429 only when `retryPostOn429` is set.
    */
   async request<T>(
     method: HttpMethod,
@@ -158,13 +179,15 @@ export class HttpClient {
         if (attempt >= maxAttempts || !this.retryable(error, idempotent)) {
           throw error;
         }
-        await sleep(this.backoffMs(error, attempt));
+        await sleep(this.backoffMs(error, attempt), options.signal);
       }
     }
   }
 
   private retryable(error: unknown, idempotent: boolean): boolean {
-    if (error instanceof RateLimitError) return true;
+    if (error instanceof RateLimitError) {
+      return idempotent || this.config.retry.retryPostOn429 === true;
+    }
     if (error instanceof ServiceError) return idempotent;
     if (error instanceof NetworkError) return idempotent;
     return false;
@@ -177,7 +200,7 @@ export class HttpClient {
       this.config.retry.respectRetryAfter &&
       error.retryAfter !== undefined
     ) {
-      return error.retryAfter * 1000;
+      return Math.min(error.retryAfter * 1000, MAX_RETRY_AFTER_MS);
     }
     return Math.min(2 ** (attempt - 1) * 500, 30_000);
   }
@@ -197,15 +220,14 @@ export class HttpClient {
       this.config.timeoutMs > 0
         ? setTimeout(() => controller.abort(), this.config.timeoutMs)
         : undefined;
-    if (options.signal) {
-      if (options.signal.aborted) controller.abort();
-      else
-        options.signal.addEventListener("abort", () => controller.abort(), {
-          once: true,
-        });
-    }
+    const onAbort = () => controller.abort();
+    if (options.signal?.aborted) controller.abort();
+    else options.signal?.addEventListener("abort", onAbort, { once: true });
 
+    // The timer stays armed through the body read, so a stalled body times out
+    // the same way a stalled connection does.
     let response: Response;
+    let text: string;
     try {
       response = await this.config.fetch(target, {
         method,
@@ -213,6 +235,7 @@ export class HttpClient {
         body: hasBody ? JSON.stringify(options.body) : undefined,
         signal: controller.signal,
       });
+      text = await response.text();
     } catch (cause) {
       // A caller abort should surface as itself; a timeout or transport failure
       // becomes a NetworkError so the retry and the catch sites stay uniform.
@@ -221,9 +244,9 @@ export class HttpClient {
       throw new NetworkError(`Could not reach the API: ${reason}.`, { cause });
     } finally {
       if (timer) clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onAbort);
     }
 
-    const text = await response.text();
     let body: unknown;
     try {
       body = text ? JSON.parse(text) : undefined;

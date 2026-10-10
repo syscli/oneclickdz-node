@@ -4,6 +4,7 @@ import {
   encodeQuery,
   buildHeaders,
   parseRetryAfter,
+  MAX_RETRY_AFTER_MS,
   type HttpClientConfig,
   type FetchLike,
 } from "../src/http";
@@ -201,5 +202,100 @@ describe("HttpClient.request", () => {
       ),
     ).rejects.toBeInstanceOf(RateLimitError);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  const limited = () =>
+    jsonResponse(
+      { success: false, error: { code: "RATE_LIMIT_EXCEEDED", message: "slow" } },
+      { status: 429, headers: { "retry-after": "0" } },
+    );
+
+  it("does not retry a POST on 429 by default", async () => {
+    const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(limited());
+    await expect(
+      client(fetchImpl).request("POST", "mobile/send", { body: {} }),
+    ).rejects.toBeInstanceOf(RateLimitError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a POST on 429 when opted in", async () => {
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValueOnce(limited())
+      .mockResolvedValueOnce(jsonResponse({ success: true, data: "ok" }));
+    const env = await client(fetchImpl, {
+      retry: { attempts: 3, respectRetryAfter: true, retryPostOn429: true },
+    }).request<string>("POST", "mobile/send", { body: {} });
+    expect(env.data).toBe("ok");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("caps a long Retry-After at sixty seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi
+        .fn<FetchLike>()
+        .mockResolvedValueOnce(
+          jsonResponse(
+            { success: false, error: { code: "RATE_LIMIT_EXCEEDED" } },
+            { status: 429, headers: { "retry-after": "3600" } },
+          ),
+        )
+        .mockResolvedValueOnce(jsonResponse({ success: true, data: "ok" }));
+      const pending = client(fetchImpl).request<string>("GET", "ping");
+      await vi.advanceTimersByTimeAsync(MAX_RETRY_AFTER_MS);
+      expect((await pending).data).toBe("ok");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops waiting between retries when the caller aborts", async () => {
+    const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(
+      jsonResponse(
+        { success: false, error: { code: "RATE_LIMIT_EXCEEDED" } },
+        { status: 429, headers: { "retry-after": "30" } },
+      ),
+    );
+    const controller = new AbortController();
+    const pending = client(fetchImpl).request("GET", "ping", {
+      signal: controller.signal,
+    });
+    setTimeout(() => controller.abort(new Error("stop")), 10);
+    await expect(pending).rejects.toThrow("stop");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("times out a body that never finishes", async () => {
+    const fetchImpl = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) =>
+        ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          text: () =>
+            new Promise<string>((_, reject) =>
+              init!.signal!.addEventListener("abort", () =>
+                reject(new Error("aborted")),
+              ),
+            ),
+        }) as unknown as Response,
+    );
+    await expect(
+      client(fetchImpl as unknown as FetchLike, {
+        timeoutMs: 20,
+        retry: { attempts: 1, respectRetryAfter: true },
+      }).request("GET", "ping"),
+    ).rejects.toBeInstanceOf(NetworkError);
+  });
+
+  it("removes its listener from the caller's signal", async () => {
+    const fetchImpl = vi
+      .fn<FetchLike>()
+      .mockResolvedValue(jsonResponse({ success: true, data: "ok" }));
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    await client(fetchImpl).request("GET", "ping", { signal: controller.signal });
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
   });
 });
