@@ -1,7 +1,9 @@
 // A small reference generator. Every send accepts a caller `ref`; when one is
-// not given the client makes its own, so a resend after a dropped connection
-// reuses the same reference and the API rejects the duplicate instead of
-// charging the account a second time. That is the whole point of having a ref.
+// not given the client makes its own and puts it on `error.ref` if the send
+// fails. Each call to `send` without a ref gets a fresh one, so calling `send`
+// again after a dropped connection is a new order. Reconcile with the ref from
+// the error first; resend only with that same ref, which the API rejects as a
+// duplicate if the first one went through.
 
 /** Build a unique-enough order reference with a readable prefix. */
 export function generateRef(prefix = "ocd"): string {
