@@ -11,6 +11,7 @@ import { GIFT_TERMINAL } from "../types";
 import { pollUntil, type PollOptions } from "../poll";
 import { Issues, requireText } from "../validate";
 import { Secret } from "../secret";
+import { attachOrderContext } from "../errors";
 
 export interface GiftProductSummary {
   id: string;
@@ -169,7 +170,12 @@ export class GiftCards extends Resource {
     );
   }
 
-  /** Place an order. The product, type, and quantity are checked first. */
+  /**
+   * Place an order. The product, type, and quantity are checked first. The
+   * endpoint takes no order reference, so a failed call cannot be deduplicated:
+   * after a NetworkError or a timeout, check `listOrders` for the order before
+   * placing it again, or you may buy the cards twice.
+   */
   async placeOrder(
     input: GiftOrderInput,
     signal?: AbortSignal,
@@ -196,17 +202,22 @@ export class GiftCards extends Resource {
    * Place an order and wait for it to settle. Resolves once the order is
    * FULFILLED, PARTIALLY_FILLED, or REFUNDED. Gift cards can take longer than a
    * top-up, so this checks every 5 seconds for up to 10 minutes by default.
+   * A failure after the order was placed carries `error.orderId`.
    */
   async placeOrderAndWait(
     input: GiftOrderInput,
     options: PollOptions = {},
   ): Promise<GiftOrder> {
     const { orderId } = await this.placeOrder(input, options.signal);
-    return pollUntil(
-      () => this.checkOrder(orderId, options.signal),
-      isTerminal,
-      { intervalMs: 5000, maxAttempts: 120, ...options },
-    );
+    try {
+      return await pollUntil(
+        () => this.checkOrder(orderId, options.signal),
+        isTerminal,
+        { intervalMs: 5000, maxAttempts: 120, ...options },
+      );
+    } catch (error) {
+      throw attachOrderContext(error, { orderId });
+    }
   }
 
   /** One page of past orders, newest first. */

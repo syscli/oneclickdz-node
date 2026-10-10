@@ -3,6 +3,7 @@ import { HttpClient, type FetchLike, type HttpClientConfig } from "../src/http";
 import { GiftCards } from "../src/resources/giftcards";
 import { Secret } from "../src/secret";
 import { ValidationError } from "../src/errors";
+import { PollTimeoutError } from "../src/poll";
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -130,5 +131,71 @@ describe("GiftCards.placeOrderAndWait", () => {
     expect(String(fetchImpl.mock.calls[1]![0])).toContain(
       "/gift-cards/checkOrder/o1",
     );
+  });
+});
+
+describe("GiftCards order context and lookups", () => {
+  it("puts the order id on a wait that times out", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).endsWith("/gift-cards/placeOrder")) {
+        return jsonResponse({ success: true, data: { orderId: "o7" } });
+      }
+      return jsonResponse({ success: true, data: { status: "HANDLING" } });
+    }) as unknown as FetchLike;
+    const error = await new GiftCards(http(fetchImpl))
+      .placeOrderAndWait(
+        { productId: "psn", typeId: "t500", quantity: 1 },
+        { intervalMs: 0, maxAttempts: 2 },
+      )
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(PollTimeoutError);
+    expect(error.orderId).toBe("o7");
+  });
+
+  it("reads a product's denominations", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        success: true,
+        data: {
+          productId: "psn us",
+          productTitle: "PSN",
+          types: [{ id: "t1", name: "PSN 500 DA", price: 480, quantity: 3 }],
+        },
+      }),
+    );
+    const details = await new GiftCards(http(fetchImpl)).checkProduct("psn us");
+    expect(details.types[0]?.quantity).toBe(3);
+    expect(String(fetchImpl.mock.calls[0]![0])).toContain(
+      "/gift-cards/checkProduct/psn%20us",
+    );
+  });
+
+  it("lists and paginates past orders with cards wrapped", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const page = Number(new URL(String(url)).searchParams.get("page") ?? "1");
+      return jsonResponse({
+        success: true,
+        data: {
+          items: [
+            {
+              _id: `o${page}`,
+              status: "FULFILLED",
+              quantity: 1,
+              fulfilled_quantity: 1,
+              fulfilled_amount: 480,
+              price_per_card: 480,
+              cards: [{ value: "C", serial: "S" }],
+            },
+          ],
+          pagination: { page, pageSize: 1, totalPages: 2, totalResults: 2 },
+        },
+      });
+    }) as unknown as FetchLike;
+    const gifts = new GiftCards(http(fetchImpl));
+    const first = await gifts.listOrders();
+    expect(first.items[0]?.cards[0]?.value).toBeInstanceOf(Secret);
+    const seen: string[] = [];
+    for await (const o of gifts.paginateOrders()) seen.push(o._id ?? "");
+    expect(seen).toEqual(["o1", "o2"]);
   });
 });
