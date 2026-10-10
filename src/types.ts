@@ -3,6 +3,7 @@
 // catalogs, payment links) live with their resources.
 
 import type { Pagination } from "./http";
+import type { Secret } from "./secret";
 
 /**
  * Where a mobile or internet top-up sits in its lifecycle. PENDING and HANDLING
@@ -52,7 +53,8 @@ export type KeyType = "SANDBOX" | "PRODUCTION";
 export type KeyScope = "READ-WRITE" | "READ-ONLY";
 
 export interface ApiKeyInfo {
-  key: string;
+  /** The access token itself, wrapped so it stays out of logs. */
+  key: Secret<string>;
   isEnabled: boolean;
   type: KeyType;
   /** Allowed source IPs. An empty array means any IP is accepted. */

@@ -44,7 +44,7 @@ describe("Core", () => {
         data: {
           username: "boutique-batna",
           apiKey: {
-            key: "k",
+            key: "sk_sandbox_abc",
             isEnabled: true,
             type: "SANDBOX",
             allowedips: [],
@@ -57,6 +57,8 @@ describe("Core", () => {
     expect(result.username).toBe("boutique-batna");
     expect(result.apiKey.type).toBe("SANDBOX");
     expect(result.apiKey.scope).toBe("READ-WRITE");
+    expect(result.apiKey.key.reveal()).toBe("sk_sandbox_abc");
+    expect(JSON.stringify(result)).not.toContain("sk_sandbox_abc");
   });
 });
 
