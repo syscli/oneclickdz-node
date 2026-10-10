@@ -210,16 +210,23 @@ export class GiftCards extends Resource {
   }
 
   /** One page of past orders, newest first. */
-  listOrders(params: GiftOrdersParams = {}): Promise<Page<GiftOrder>> {
+  listOrders(
+    params: GiftOrdersParams = {},
+    signal?: AbortSignal,
+  ): Promise<Page<GiftOrder>> {
     return this.fetchPage<GiftOrder>(
       "gift-cards/list",
       { ...params },
       extractOrders,
+      signal,
     );
   }
 
   /** Every past order across every page, as an async iterator. */
-  paginateOrders(params: GiftOrdersParams = {}): AsyncGenerator<GiftOrder> {
-    return this.iterate(this.listOrders(params));
+  paginateOrders(
+    params: GiftOrdersParams = {},
+    signal?: AbortSignal,
+  ): AsyncGenerator<GiftOrder> {
+    return this.iterate(this.listOrders(params, signal));
   }
 }

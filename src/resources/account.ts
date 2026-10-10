@@ -29,18 +29,23 @@ export class Account extends Resource {
   }
 
   /** One page of the transaction ledger, newest first. */
-  transactions(params: TransactionsParams = {}): Promise<Page<Transaction>> {
+  transactions(
+    params: TransactionsParams = {},
+    signal?: AbortSignal,
+  ): Promise<Page<Transaction>> {
     return this.fetchPage<Transaction>(
       "account/transactions",
       { ...params },
       extractTransactions,
+      signal,
     );
   }
 
   /** Every transaction across every page, as an async iterator. */
   paginateTransactions(
     params: TransactionsParams = {},
+    signal?: AbortSignal,
   ): AsyncGenerator<Transaction> {
-    return this.iterate(this.transactions(params));
+    return this.iterate(this.transactions(params, signal));
   }
 }

@@ -114,4 +114,28 @@ describe("Account", () => {
     }
     expect(seen).toEqual(["t1", "t2", "t3"]);
   });
+
+  it("stops walking pages once the caller's signal aborts", async () => {
+    const fetchImpl = vi.fn(
+      async (_url: string | URL | Request, init?: RequestInit) => {
+        if (init?.signal?.aborted) throw new Error("aborted");
+        return jsonResponse({
+          success: true,
+          data: {
+            items: [{ _id: "t1" }],
+            pagination: { page: 1, pageSize: 1, totalPages: 5, totalResults: 5 },
+          },
+        });
+      },
+    ) as unknown as FetchLike;
+
+    const controller = new AbortController();
+    const walk = new Account(http(fetchImpl)).paginateTransactions(
+      {},
+      controller.signal,
+    );
+    await walk.next();
+    controller.abort();
+    await expect(walk.next()).rejects.toThrow("aborted");
+  });
 });

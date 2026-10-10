@@ -207,15 +207,22 @@ export class Internet extends Resource {
     );
   }
 
-  list(params: InternetListParams = {}): Promise<Page<InternetTopup>> {
+  list(
+    params: InternetListParams = {},
+    signal?: AbortSignal,
+  ): Promise<Page<InternetTopup>> {
     return this.fetchPage<InternetTopup>(
       "internet/list",
       { ...params },
       extractInternetTopups,
+      signal,
     );
   }
 
-  paginate(params: InternetListParams = {}): AsyncGenerator<InternetTopup> {
-    return this.iterate(this.list(params));
+  paginate(
+    params: InternetListParams = {},
+    signal?: AbortSignal,
+  ): AsyncGenerator<InternetTopup> {
+    return this.iterate(this.list(params, signal));
   }
 }

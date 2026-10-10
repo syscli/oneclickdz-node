@@ -46,14 +46,15 @@ export abstract class Resource {
    * Fetch one page of a list. `extract` pulls the items and the pagination block
    * out of whatever shape the endpoint nests them in; it gets the whole envelope
    * because some endpoints keep pagination in `data` and others in `meta`.
-   * `next()` reissues the same request with the page number bumped.
+   * `next()` reissues the same request, and signal, with the page number bumped.
    */
   protected async fetchPage<T>(
     path: string,
     query: QueryParams,
     extract: (env: Envelope<unknown>) => { items: T[]; pagination: Pagination },
+    signal?: AbortSignal,
   ): Promise<Page<T>> {
-    const env = await this.http.request<unknown>("GET", path, { query });
+    const env = await this.http.request<unknown>("GET", path, { query, signal });
     const { items, pagination } = extract(env);
     const hasMore = pagination.page < pagination.totalPages;
     return {
@@ -66,6 +67,7 @@ export abstract class Resource {
               path,
               { ...query, page: pagination.page + 1 },
               extract,
+              signal,
             )
         : async () => undefined,
     };
