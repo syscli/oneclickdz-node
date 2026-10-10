@@ -1,6 +1,6 @@
 {
   "name": "@syscli/oneclickdz",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Typed OneClickDZ API client for Node. Mobile, internet, gift card, and payment recharges in Algeria. Server-side only.",
   "type": "module",
   "license": "MIT",
