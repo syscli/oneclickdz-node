@@ -9,6 +9,7 @@ import type { TopupStatus } from "../types";
 import { TOPUP_TERMINAL } from "../types";
 import { pollUntil, type PollOptions } from "../poll";
 import { generateRef } from "../ref";
+import { attachOrderContext } from "../errors";
 import { Issues, isMobileNumber, isWholeAmount, requireText } from "../validate";
 
 interface MobilePlanBase {
@@ -130,15 +131,25 @@ export class Mobile extends Resource {
 
   /**
    * Send a top-up. The number and amount are checked first, and a reference is
-   * generated when you do not pass one, so the returned `topupRef` is always set.
+   * generated when you do not pass one. Any error from the send carries that
+   * reference on `error.ref`. After a NetworkError or a timeout the top-up may
+   * still have gone through: look it up with `error.ref` before sending again.
    */
   async send(
     input: MobileSendInput,
     signal?: AbortSignal,
   ): Promise<MobileSendResult> {
     validateSend(input);
-    const body = { ...input, ref: input.ref ?? generateRef() };
-    return this.postData<MobileSendResult>("mobile/send", body, signal);
+    const ref = input.ref ?? generateRef();
+    try {
+      return await this.postData<MobileSendResult>(
+        "mobile/send",
+        { ...input, ref },
+        signal,
+      );
+    } catch (error) {
+      throw attachOrderContext(error, { ref });
+    }
   }
 
   /** Look a top-up up by your own reference. */
@@ -160,59 +171,94 @@ export class Mobile extends Resource {
   }
 
   /**
-   * Send a top-up and wait for it to settle, polling by reference. Resolves with
-   * the final top-up once it is FULFILLED, REFUNDED, or UNKNOWN_ERROR. Defaults
-   * to a check every 5 seconds for up to 5 minutes, which the docs recommend.
+   * Send a top-up and wait for it to settle, polling by the topup id. Resolves
+   * with the final top-up once it is FULFILLED, REFUNDED, or UNKNOWN_ERROR.
+   * Defaults to a check every 5 seconds for up to 5 minutes, which the docs
+   * recommend. Any error carries `error.ref`, and `error.orderId` (the topupId)
+   * once the send was accepted, so the order can be checked later.
    */
   async sendAndWait(
     input: MobileSendInput,
     options: PollOptions = {},
   ): Promise<MobileTopup> {
-    const { topupId } = await this.send(input, options.signal);
-    return pollUntil(
-      () => this.checkById(topupId, options.signal),
-      isTerminal,
-      { intervalMs: 5000, maxAttempts: 60, ...options },
-    );
+    const ref = input.ref ?? generateRef();
+    const { topupId } = await this.send({ ...input, ref }, options.signal);
+    return this.settle(topupId, ref, {
+      intervalMs: 5000,
+      maxAttempts: 60,
+      ...options,
+    });
   }
 
   /**
-   * List the offers available for a number. This drives the GETMENU plans: it
-   * sends a GETMENU order with a small probe amount that the operator refunds
-   * rather than charges, then reads the offers back off the refunded order. Each
-   * offer carries the `plan_code` and `amount` you would pass to `send` to buy it.
+   * List the offers available for a number through the GETMENU plans.
+   *
+   * This places a real 50 DZD order. The operator is expected to refund it and
+   * the offers are read off the refunded order, but until it settles the amount
+   * is held, and an order that ends in UNKNOWN_ERROR may not come back at once.
+   * Pass `ref` to track the probe as your own order. Each offer carries the
+   * `plan_code` and `amount` you would pass to `send` to buy it.
    */
   async getOffers(
     operator: MobileOperator,
     MSSIDN: string,
-    options: PollOptions = {},
+    options: PollOptions & { ref?: string } = {},
   ): Promise<MobileOffer[]> {
     if (!isMobileNumber(MSSIDN)) {
       const issues = new Issues();
       issues.add("MSSIDN", "is not a valid mobile number");
       issues.throwIfAny();
     }
-    // The amount is a refunded probe, not a charge. A small in-range value works
-    // across operators; the GETMENU plans accept from 50 dinars up.
+    const { ref: callerRef, ...poll } = options;
+    const ref = callerRef ?? generateRef();
+    // The GETMENU plans accept from 50 dinars up; this is the probe amount.
     const { topupId } = await this.send(
-      { plan_code: `GETMENU_${operator}`, MSSIDN, amount: 50 },
-      options.signal,
+      { plan_code: `GETMENU_${operator}`, MSSIDN, amount: 50, ref },
+      poll.signal,
     );
-    const topup = await pollUntil(
-      () => this.checkById(topupId, options.signal),
-      isTerminal,
-      { intervalMs: 3000, maxAttempts: 20, ...options },
-    );
+    const topup = await this.settle(topupId, ref, {
+      intervalMs: 3000,
+      maxAttempts: 20,
+      ...poll,
+    });
     return topup.suggested_offers ?? [];
   }
 
   /** One page of your past top-ups, newest first. */
-  list(params: MobileListParams = {}): Promise<Page<MobileTopup>> {
-    return this.fetchPage<MobileTopup>("mobile/list", { ...params }, extractTopups);
+  list(
+    params: MobileListParams = {},
+    signal?: AbortSignal,
+  ): Promise<Page<MobileTopup>> {
+    return this.fetchPage<MobileTopup>(
+      "mobile/list",
+      { ...params },
+      extractTopups,
+      signal,
+    );
   }
 
   /** Every past top-up across every page, as an async iterator. */
-  paginate(params: MobileListParams = {}): AsyncGenerator<MobileTopup> {
-    return this.iterate(this.list(params));
+  paginate(
+    params: MobileListParams = {},
+    signal?: AbortSignal,
+  ): AsyncGenerator<MobileTopup> {
+    return this.iterate(this.list(params, signal));
+  }
+
+  /** Poll a sent top-up to a final status, tagging any failure with its ids. */
+  private async settle(
+    topupId: string,
+    ref: string,
+    options: PollOptions,
+  ): Promise<MobileTopup> {
+    try {
+      return await pollUntil(
+        () => this.checkById(topupId, options.signal),
+        isTerminal,
+        options,
+      );
+    } catch (error) {
+      throw attachOrderContext(error, { ref, orderId: topupId });
+    }
   }
 }
