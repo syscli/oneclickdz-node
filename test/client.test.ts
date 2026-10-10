@@ -31,7 +31,7 @@ describe("OneClickDZ", () => {
   });
 
   it("sends the access token and hits the v3 base on a real call", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ success: true, data: { balance: 1000 } }),
     );
     const client = new OneClickDZ({ key: "secret-key", fetch: fetchImpl });
@@ -46,7 +46,7 @@ describe("OneClickDZ", () => {
   });
 
   it("offers ping and validate shortcuts", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ success: true, data: { api: "ok", operators: {} } }),
     );
     const client = new OneClickDZ({ key: "k", fetch: fetchImpl });

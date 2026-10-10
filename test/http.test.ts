@@ -84,7 +84,7 @@ describe("parseRetryAfter", () => {
 
 describe("HttpClient.request", () => {
   it("builds the URL with the v3 prefix and unwraps the envelope", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ success: true, data: { balance: 1326.13 } }),
     );
     const env = await client(fetchImpl).request<{ balance: number }>(
@@ -101,7 +101,7 @@ describe("HttpClient.request", () => {
   });
 
   it("keeps the v3 prefix even without a trailing slash on the base", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ success: true, data: 1 }));
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse({ success: true, data: 1 }));
     await client(fetchImpl, { baseUrl: "https://api.oneclickdz.com/v3" }).request(
       "GET",
       "ping",
@@ -110,7 +110,7 @@ describe("HttpClient.request", () => {
   });
 
   it("serializes a JSON body for POST", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ success: true, data: { topupId: "t1", topupRef: "r1" } }),
     );
     await client(fetchImpl).request("POST", "mobile/send", {
@@ -122,7 +122,7 @@ describe("HttpClient.request", () => {
   });
 
   it("throws a typed error from a failed envelope", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse(
         { success: false, error: { code: "ERR_PHONE", message: "bad" } },
         { status: 400 },
@@ -134,7 +134,7 @@ describe("HttpClient.request", () => {
   });
 
   it("treats a 200 with success:false as the error it is", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ success: false, error: { code: "ERR_STOCK", message: "no" } }),
     );
     await expect(client(fetchImpl).request("GET", "x")).rejects.toBeInstanceOf(

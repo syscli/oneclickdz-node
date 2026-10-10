@@ -24,7 +24,7 @@ function http(fetchImpl: FetchLike) {
 
 describe("Internet.send validation", () => {
   it("rejects an ADSL number sent as 4G", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ success: true, data: {} }));
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse({ success: true, data: {} }));
     await expect(
       new Internet(http(fetchImpl)).send({
         type: "4G",
@@ -36,7 +36,7 @@ describe("Internet.send validation", () => {
   });
 
   it("accepts a valid ADSL recharge and fills a reference", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ success: true, data: { topupId: "i1", topupRef: "r1" } }),
     );
     await new Internet(http(fetchImpl)).send({
@@ -51,7 +51,7 @@ describe("Internet.send validation", () => {
 
 describe("Internet card codes", () => {
   it("wraps card_code in a Secret that stays out of logs", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
@@ -73,7 +73,7 @@ describe("Internet card codes", () => {
   });
 
   it("leaves card_code undefined while the order is still handling", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
@@ -93,7 +93,7 @@ describe("Internet card codes", () => {
 
 describe("Internet.list", () => {
   it("normalizes the topups field and the meta pagination shape", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
@@ -132,9 +132,9 @@ describe("Internet order context and lookups", () => {
   const input = { type: "ADSL" as const, number: "036123456", value: 1000 };
 
   it("puts the generated ref on a send that never got an answer", async () => {
-    const fetchImpl = vi.fn(async () => {
+    const fetchImpl = vi.fn<FetchLike>(async () => {
       throw new Error("socket hang up");
-    }) as unknown as FetchLike;
+    });
     const error = await new Internet(http(fetchImpl)).send(input).catch((e) => e);
     expect(error).toBeInstanceOf(NetworkError);
     expect(error.ref).toMatch(/^ocd-/);
@@ -142,7 +142,7 @@ describe("Internet order context and lookups", () => {
 
   it("sends, polls by id, and tags a mid-poll failure", async () => {
     let checks = 0;
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+    const fetchImpl = vi.fn<FetchLike>(async (url: string | URL | Request) => {
       if (String(url).endsWith("/internet/send")) {
         return jsonResponse({ success: true, data: { topupId: "i1", topupRef: "r" } });
       }
@@ -150,7 +150,7 @@ describe("Internet order context and lookups", () => {
         return jsonResponse({ success: true, data: { _id: "i1", status: "HANDLING" } });
       }
       throw new Error("socket hang up");
-    }) as unknown as FetchLike;
+    });
     const error = await new Internet(http(fetchImpl))
       .sendAndWait({ ...input, ref: "mine" }, { intervalMs: 0 })
       .catch((e) => e);
@@ -160,7 +160,7 @@ describe("Internet order context and lookups", () => {
   });
 
   it("resolves sendAndWait with the settled order", async () => {
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+    const fetchImpl = vi.fn<FetchLike>(async (url: string | URL | Request) => {
       if (String(url).endsWith("/internet/send")) {
         return jsonResponse({ success: true, data: { topupId: "i1", topupRef: "r" } });
       }
@@ -168,7 +168,7 @@ describe("Internet order context and lookups", () => {
         success: true,
         data: { _id: "i1", status: "FULFILLED", card_code: "1234" },
       });
-    }) as unknown as FetchLike;
+    });
     const topup = await new Internet(http(fetchImpl)).sendAndWait(input, {
       intervalMs: 0,
     });
@@ -177,7 +177,7 @@ describe("Internet order context and lookups", () => {
   });
 
   it("reads products and checks a number", async () => {
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+    const fetchImpl = vi.fn<FetchLike>(async (url: string | URL | Request) => {
       if (String(url).includes("/internet/products")) {
         return jsonResponse({
           success: true,
@@ -185,13 +185,13 @@ describe("Internet order context and lookups", () => {
         });
       }
       return jsonResponse({ success: true, data: { ncli: "12***", type: "ADSL" } });
-    }) as unknown as FetchLike;
+    });
     const internet = new Internet(http(fetchImpl));
     const products = await internet.products("ADSL");
     expect(products.products[0]?.value).toBe(1000);
     const check = await internet.checkNumber("ADSL", "036123456");
     expect(check.ncli).toBe("12***");
-    const calls = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    const calls = fetchImpl.mock.calls;
     expect(String(calls[0]![0])).toContain("/internet/products?type=ADSL");
     expect(String(calls[1]![0])).toContain(
       "/internet/check-number?type=ADSL&number=036123456",
@@ -199,14 +199,14 @@ describe("Internet order context and lookups", () => {
   });
 
   it("paginates past recharges", async () => {
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+    const fetchImpl = vi.fn<FetchLike>(async (url: string | URL | Request) => {
       const page = Number(new URL(String(url)).searchParams.get("page") ?? "1");
       return jsonResponse({
         success: true,
         data: { topups: [{ _id: `i${page}`, status: "FULFILLED" }] },
         meta: { pagination: { currentPage: page, totalPages: 2, totalItems: 2 } },
       });
-    }) as unknown as FetchLike;
+    });
     const seen: string[] = [];
     for await (const t of new Internet(http(fetchImpl)).paginate()) seen.push(t._id);
     expect(seen).toEqual(["i1", "i2"]);

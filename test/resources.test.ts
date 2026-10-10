@@ -23,7 +23,7 @@ function http(fetchImpl: FetchLike, over: Partial<HttpClientConfig> = {}) {
 
 describe("Core", () => {
   it("reads the service health from ping", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: { api: "ok", operators: { djezzy: "up", mobilis: "up" } },
@@ -38,7 +38,7 @@ describe("Core", () => {
   });
 
   it("reads the key environment from validate", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
@@ -64,7 +64,7 @@ describe("Core", () => {
 
 describe("Account", () => {
   it("reads the balance", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ success: true, data: { balance: 1326.13 } }),
     );
     const balance = await new Account(http(fetchImpl)).balance();
@@ -72,7 +72,7 @@ describe("Account", () => {
   });
 
   it("returns a transaction page with the right paging flags", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
@@ -105,10 +105,10 @@ describe("Account", () => {
         },
       },
     };
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+    const fetchImpl = vi.fn<FetchLike>(async (url: string | URL | Request) => {
       const page = new URL(String(url)).searchParams.get("page") ?? "1";
       return jsonResponse(pages[page]);
-    }) as unknown as FetchLike;
+    });
 
     const seen: string[] = [];
     for await (const tx of new Account(http(fetchImpl)).paginateTransactions()) {

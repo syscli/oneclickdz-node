@@ -25,7 +25,7 @@ function http(fetchImpl: FetchLike) {
 
 describe("GiftCards.catalog", () => {
   it("keeps the top-level totals alongside the categories", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         totalCategories: 2,
@@ -46,7 +46,7 @@ describe("GiftCards.catalog", () => {
 
 describe("GiftCards.placeOrder", () => {
   it("rejects a quantity below one before sending", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ success: true, data: {} }));
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse({ success: true, data: {} }));
     await expect(
       new GiftCards(http(fetchImpl)).placeOrder({
         productId: "psn",
@@ -58,7 +58,7 @@ describe("GiftCards.placeOrder", () => {
   });
 
   it("returns the order id on a valid order", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({ success: true, data: { orderId: "o1" } }),
     );
     const result = await new GiftCards(http(fetchImpl)).placeOrder({
@@ -72,7 +72,7 @@ describe("GiftCards.placeOrder", () => {
 
 describe("GiftCards.checkOrder", () => {
   it("wraps every card code and serial in a Secret", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
@@ -101,7 +101,7 @@ describe("GiftCards.placeOrderAndWait", () => {
   it("places the order then polls the order id until terminal", async () => {
     const statuses = ["HANDLING", "PARTIALLY_FILLED"];
     let check = 0;
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+    const fetchImpl = vi.fn<FetchLike>(async (url: string | URL | Request) => {
       const path = String(url);
       if (path.endsWith("/gift-cards/placeOrder")) {
         return jsonResponse({ success: true, data: { orderId: "o1" } });
@@ -121,7 +121,7 @@ describe("GiftCards.placeOrderAndWait", () => {
           time: "2026-06-25T00:00:00.000Z",
         },
       });
-    }) as unknown as FetchLike;
+    });
 
     const order = await new GiftCards(http(fetchImpl)).placeOrderAndWait(
       { productId: "psn", typeId: "t500", quantity: 2 },
@@ -136,12 +136,12 @@ describe("GiftCards.placeOrderAndWait", () => {
 
 describe("GiftCards order context and lookups", () => {
   it("puts the order id on a wait that times out", async () => {
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+    const fetchImpl = vi.fn<FetchLike>(async (url: string | URL | Request) => {
       if (String(url).endsWith("/gift-cards/placeOrder")) {
         return jsonResponse({ success: true, data: { orderId: "o7" } });
       }
       return jsonResponse({ success: true, data: { status: "HANDLING" } });
-    }) as unknown as FetchLike;
+    });
     const error = await new GiftCards(http(fetchImpl))
       .placeOrderAndWait(
         { productId: "psn", typeId: "t500", quantity: 1 },
@@ -153,7 +153,7 @@ describe("GiftCards order context and lookups", () => {
   });
 
   it("reads a product's denominations", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
@@ -171,7 +171,7 @@ describe("GiftCards order context and lookups", () => {
   });
 
   it("lists and paginates past orders with cards wrapped", async () => {
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+    const fetchImpl = vi.fn<FetchLike>(async (url: string | URL | Request) => {
       const page = Number(new URL(String(url)).searchParams.get("page") ?? "1");
       return jsonResponse({
         success: true,
@@ -190,7 +190,7 @@ describe("GiftCards order context and lookups", () => {
           pagination: { page, pageSize: 1, totalPages: 2, totalResults: 2 },
         },
       });
-    }) as unknown as FetchLike;
+    });
     const gifts = new GiftCards(http(fetchImpl));
     const first = await gifts.listOrders();
     expect(first.items[0]?.cards[0]?.value).toBeInstanceOf(Secret);

@@ -23,7 +23,7 @@ function http(fetchImpl: FetchLike) {
 
 describe("Payments.createLink validation", () => {
   it("rejects an amount below the floor before sending", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ success: true, data: {} }));
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse({ success: true, data: {} }));
     await expect(
       new Payments(http(fetchImpl)).createLink({
         productInfo: { title: "Order 1043", amount: 100 },
@@ -33,7 +33,7 @@ describe("Payments.createLink validation", () => {
   });
 
   it("rejects an unknown fee mode and a bad redirect", async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({ success: true, data: {} }));
+    const fetchImpl = vi.fn<FetchLike>(async () => jsonResponse({ success: true, data: {} }));
     const payments = new Payments(http(fetchImpl));
     await payments
       .createLink({
@@ -51,7 +51,7 @@ describe("Payments.createLink validation", () => {
   });
 
   it("sends a valid request and returns the URL", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
@@ -74,7 +74,7 @@ describe("Payments.waitForPayment", () => {
   it("polls the reference until the status is terminal", async () => {
     const statuses = ["PENDING", "PENDING", "CONFIRMED"];
     let check = 0;
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
@@ -100,7 +100,7 @@ describe("Payments.waitForPayment", () => {
 
 describe("Payments.checkPayment", () => {
   it("reads a pending payment and encodes the reference", async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         success: true,
         data: {
