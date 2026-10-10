@@ -10,11 +10,18 @@ import type { GiftProductType } from "./resources/giftcards";
 /** A markup as a percentage of cost, or a flat number of dinars added on top. */
 export type Markup = { percent: number } | { flat: number };
 
-/** Apply a markup to a wholesale cost and round to a whole dinar. */
+/**
+ * Apply a markup to a wholesale cost and round up to a whole dinar, so the sell
+ * price never lands under cost. The markup must be a finite number, zero or more.
+ */
 export function sellPrice(cost: number, markup: Markup): number {
-  const raw =
-    "percent" in markup ? cost * (1 + markup.percent / 100) : cost + markup.flat;
-  return Math.round(raw);
+  const amount = "percent" in markup ? markup.percent : markup.flat;
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new RangeError("A markup must be a finite number, zero or more.");
+  }
+  const raw = "percent" in markup ? cost * (1 + amount / 100) : cost + amount;
+  // Trim float noise first, so 1960 * 1.1 stays 2156 rather than rounding up.
+  return Math.ceil(Math.round(raw * 100) / 100);
 }
 
 /** An internet product as a customer should see it: face value, sell price, stock. */

@@ -6,13 +6,23 @@ import {
 } from "../src/pricing";
 
 describe("sellPrice", () => {
-  it("adds a percentage and rounds to a whole dinar", () => {
+  it("adds a percentage and rounds up to a whole dinar", () => {
     expect(sellPrice(1960, { percent: 10 })).toBe(2156);
-    expect(sellPrice(490, { percent: 12.5 })).toBe(551);
+    expect(sellPrice(490, { percent: 12.5 })).toBe(552);
   });
 
   it("adds a flat amount", () => {
     expect(sellPrice(980, { flat: 50 })).toBe(1030);
+  });
+
+  it("never sells under a fractional cost", () => {
+    expect(sellPrice(100.4, { percent: 0 })).toBe(101);
+  });
+
+  it("rejects a negative or non-finite markup", () => {
+    expect(() => sellPrice(100, { percent: -5 })).toThrow(RangeError);
+    expect(() => sellPrice(100, { flat: Number.NaN })).toThrow(RangeError);
+    expect(() => sellPrice(100, { flat: Infinity })).toThrow(RangeError);
   });
 });
 
