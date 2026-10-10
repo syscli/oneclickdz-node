@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { HttpClient, type FetchLike, type HttpClientConfig } from "../src/http";
 import { Internet } from "../src/resources/internet";
 import { Secret } from "../src/secret";
-import { ValidationError } from "../src/errors";
+import { NetworkError, ValidationError } from "../src/errors";
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -125,5 +125,90 @@ describe("Internet.list", () => {
     expect(page.totalResults).toBe(7);
     expect(page.hasMore).toBe(true);
     expect(page.items[0]?.card_code).toBeInstanceOf(Secret);
+  });
+});
+
+describe("Internet order context and lookups", () => {
+  const input = { type: "ADSL" as const, number: "036123456", value: 1000 };
+
+  it("puts the generated ref on a send that never got an answer", async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error("socket hang up");
+    }) as unknown as FetchLike;
+    const error = await new Internet(http(fetchImpl)).send(input).catch((e) => e);
+    expect(error).toBeInstanceOf(NetworkError);
+    expect(error.ref).toMatch(/^ocd-/);
+  });
+
+  it("sends, polls by id, and tags a mid-poll failure", async () => {
+    let checks = 0;
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).endsWith("/internet/send")) {
+        return jsonResponse({ success: true, data: { topupId: "i1", topupRef: "r" } });
+      }
+      if (checks++ === 0) {
+        return jsonResponse({ success: true, data: { _id: "i1", status: "HANDLING" } });
+      }
+      throw new Error("socket hang up");
+    }) as unknown as FetchLike;
+    const error = await new Internet(http(fetchImpl))
+      .sendAndWait({ ...input, ref: "mine" }, { intervalMs: 0 })
+      .catch((e) => e);
+    expect(error).toBeInstanceOf(NetworkError);
+    expect(error.ref).toBe("mine");
+    expect(error.orderId).toBe("i1");
+  });
+
+  it("resolves sendAndWait with the settled order", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).endsWith("/internet/send")) {
+        return jsonResponse({ success: true, data: { topupId: "i1", topupRef: "r" } });
+      }
+      return jsonResponse({
+        success: true,
+        data: { _id: "i1", status: "FULFILLED", card_code: "1234" },
+      });
+    }) as unknown as FetchLike;
+    const topup = await new Internet(http(fetchImpl)).sendAndWait(input, {
+      intervalMs: 0,
+    });
+    expect(topup.status).toBe("FULFILLED");
+    expect(topup.card_code?.reveal()).toBe("1234");
+  });
+
+  it("reads products and checks a number", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes("/internet/products")) {
+        return jsonResponse({
+          success: true,
+          data: { type: "ADSL", products: [{ cost: 980, value: 1000, available: true }] },
+        });
+      }
+      return jsonResponse({ success: true, data: { ncli: "12***", type: "ADSL" } });
+    }) as unknown as FetchLike;
+    const internet = new Internet(http(fetchImpl));
+    const products = await internet.products("ADSL");
+    expect(products.products[0]?.value).toBe(1000);
+    const check = await internet.checkNumber("ADSL", "036123456");
+    expect(check.ncli).toBe("12***");
+    const calls = (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls;
+    expect(String(calls[0]![0])).toContain("/internet/products?type=ADSL");
+    expect(String(calls[1]![0])).toContain(
+      "/internet/check-number?type=ADSL&number=036123456",
+    );
+  });
+
+  it("paginates past recharges", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const page = Number(new URL(String(url)).searchParams.get("page") ?? "1");
+      return jsonResponse({
+        success: true,
+        data: { topups: [{ _id: `i${page}`, status: "FULFILLED" }] },
+        meta: { pagination: { currentPage: page, totalPages: 2, totalItems: 2 } },
+      });
+    }) as unknown as FetchLike;
+    const seen: string[] = [];
+    for await (const t of new Internet(http(fetchImpl)).paginate()) seen.push(t._id);
+    expect(seen).toEqual(["i1", "i2"]);
   });
 });

@@ -9,6 +9,7 @@ import type { TopupStatus } from "../types";
 import { TOPUP_TERMINAL } from "../types";
 import { pollUntil, type PollOptions } from "../poll";
 import { generateRef } from "../ref";
+import { attachOrderContext } from "../errors";
 import {
   Issues,
   isAdslNumber,
@@ -162,14 +163,26 @@ export class Internet extends Resource {
     );
   }
 
-  /** Send a recharge. The number and value are checked first; a ref is filled in. */
+  /**
+   * Send a recharge. The number and value are checked first; a ref is filled in
+   * and carried on `error.ref` if the send fails. After a NetworkError or a
+   * timeout, look the order up with that ref before sending again.
+   */
   async send(
     input: InternetSendInput,
     signal?: AbortSignal,
   ): Promise<InternetSendResult> {
     validateSend(input);
-    const body = { ...input, ref: input.ref ?? generateRef() };
-    return this.postData<InternetSendResult>("internet/send", body, signal);
+    const ref = input.ref ?? generateRef();
+    try {
+      return await this.postData<InternetSendResult>(
+        "internet/send",
+        { ...input, ref },
+        signal,
+      );
+    } catch (error) {
+      throw attachOrderContext(error, { ref });
+    }
   }
 
   async checkByRef(ref: string, signal?: AbortSignal): Promise<InternetTopup> {
@@ -194,17 +207,24 @@ export class Internet extends Resource {
    * Send and wait for the recharge to settle. Resolves with the final order,
    * its `card_code` ready to reveal once FULFILLED. A QUEUED order can take up to
    * 48 hours, well past the default polling window, so expect a timeout there.
+   * Any error carries `error.ref`, and `error.orderId` (the topupId) once the
+   * send was accepted.
    */
   async sendAndWait(
     input: InternetSendInput,
     options: PollOptions = {},
   ): Promise<InternetTopup> {
-    const { topupId } = await this.send(input, options.signal);
-    return pollUntil(
-      () => this.checkById(topupId, options.signal),
-      isTerminal,
-      { intervalMs: 5000, maxAttempts: 60, ...options },
-    );
+    const ref = input.ref ?? generateRef();
+    const { topupId } = await this.send({ ...input, ref }, options.signal);
+    try {
+      return await pollUntil(
+        () => this.checkById(topupId, options.signal),
+        isTerminal,
+        { intervalMs: 5000, maxAttempts: 60, ...options },
+      );
+    } catch (error) {
+      throw attachOrderContext(error, { ref, orderId: topupId });
+    }
   }
 
   list(
