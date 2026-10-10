@@ -97,3 +97,25 @@ describe("Payments.waitForPayment", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("Payments.checkPayment", () => {
+  it("reads a pending payment and encodes the reference", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        success: true,
+        data: {
+          status: "PENDING",
+          message: "waiting",
+          paymentRef: "pay 1",
+          transactionDetails: { amount: 1000, currency: "DZD", isSandbox: true },
+        },
+      }),
+    );
+    const check = await new Payments(http(fetchImpl)).checkPayment("pay 1");
+    expect(check.status).toBe("PENDING");
+    expect(check.transactionDetails.createdDate).toBeUndefined();
+    expect(String(fetchImpl.mock.calls[0]![0])).toContain(
+      "/ocpay/checkPayment/pay%201",
+    );
+  });
+});
