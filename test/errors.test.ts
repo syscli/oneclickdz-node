@@ -10,6 +10,8 @@ import {
   RateLimitError,
   ServiceError,
   OneClickError,
+  NetworkError,
+  attachOrderContext,
 } from "../src/errors";
 
 function envelope(code: string, message = "boom", details?: unknown) {
@@ -88,5 +90,20 @@ describe("ValidationError", () => {
     expect(err.issues).toHaveLength(1);
     expect(err.issues[0]?.ref).toBe("order-1");
     expect(err).toBeInstanceOf(OneClickError);
+  });
+});
+
+describe("attachOrderContext", () => {
+  it("sets the ref and order id without overwriting either", () => {
+    const err = new NetworkError("down");
+    attachOrderContext(err, { ref: "r1" });
+    attachOrderContext(err, { ref: "r2", orderId: "t1" });
+    expect(err.ref).toBe("r1");
+    expect(err.orderId).toBe("t1");
+  });
+
+  it("tags a plain thrown error too", () => {
+    const err = attachOrderContext(new Error("aborted"), { ref: "r1" });
+    expect((err as Error & { ref?: string }).ref).toBe("r1");
   });
 });

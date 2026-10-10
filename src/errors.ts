@@ -47,6 +47,13 @@ export class OneClickError extends Error {
   readonly details: unknown;
   readonly requestId?: string;
   readonly body: unknown;
+  /**
+   * The order reference a send went out with, set on any error from a send or a
+   * send-and-wait. Use it to look the order up instead of sending again.
+   */
+  ref?: string;
+  /** The order id (a topupId or a gift orderId), once the API has returned one. */
+  orderId?: string;
 
   constructor(
     message: string,
@@ -149,6 +156,30 @@ export class NetworkError extends OneClickError {
 
 /** Any other 4xx the client does not model on its own. */
 export class RequestError extends OneClickError {}
+
+/** What is known about an order when a send or a wait fails. */
+export interface OrderContext {
+  ref?: string;
+  orderId?: string;
+}
+
+/**
+ * Copy the order reference and id onto an error so the caller can reconcile the
+ * order. Works on any thrown object, including a caller abort, and never
+ * overwrites a value already set.
+ */
+export function attachOrderContext<E>(error: E, context: OrderContext): E {
+  if (error && typeof error === "object") {
+    const target = error as OrderContext;
+    if (context.ref !== undefined && target.ref === undefined) {
+      target.ref = context.ref;
+    }
+    if (context.orderId !== undefined && target.orderId === undefined) {
+      target.orderId = context.orderId;
+    }
+  }
+  return error;
+}
 
 interface ApiErrorBody {
   code?: OneClickErrorCode;

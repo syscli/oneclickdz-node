@@ -31,6 +31,7 @@ export type {
   ValidationIssue,
   ValidationErrorOptions,
   RateLimitErrorOptions,
+  OrderContext,
 } from "./errors";
 
 export { MAX_RETRY_AFTER_MS } from "./http";
